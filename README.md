@@ -7,15 +7,15 @@ Pydantic 스키마와 프롬프트를 정의하고, 여러 프레임워크에 �
 
 ### Supported Frameworks
 
-| 프레임워크 | 모드 | 구조화 방식 |
-|-----------|------|-----------|
-| **Instructor** | tools, json_schema | Tool Calling / JSON Schema |
-| **OpenAI Native** | default | JSON Schema (response_format) |
-| **LangChain** | json_schema, function_calling | JSON Schema / Tool Calling |
-| **Marvin** | default | Tool Calling |
-| **PydanticAI** | default | Tool Calling |
-| **Mirascope** | default | Tool Calling |
-| **Guardrails** | default | litellm 경유 |
+| 프레임워크 | 모드 | 구조화 방식 | Docs |
+|-----------|------|-----------|------|
+| **Instructor** | tools, json_schema | Tool Calling / JSON Schema | [docs](https://python.useinstructor.com/) |
+| **OpenAI Native** | default | JSON Schema (response_format) | [docs](https://platform.openai.com/docs/guides/structured-outputs) |
+| **LangChain** | json_schema, function_calling | JSON Schema / Tool Calling | [docs](https://python.langchain.com/docs/how_to/structured_output/) |
+| **Marvin** | default | Tool Calling | [docs](https://askmarvin.ai/docs/text/extraction/) |
+| **PydanticAI** | default | Tool Calling | [docs](https://ai.pydantic.dev/output/) |
+| **Mirascope** | default | Tool Calling | [docs](https://mirascope.com/docs/mirascope/guides/getting-started/structured-outputs/) |
+| **Guardrails** | default | litellm 경유 | [docs](https://www.guardrailsai.com/docs/how_to_guides/generate_structured_data) |
 
 ---
 
