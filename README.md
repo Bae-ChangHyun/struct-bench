@@ -5,7 +5,7 @@
 
 Pydantic 스키마와 프롬프트를 정의하고, 여러 프레임워크에 동일한 입력을 넣어 결과 품질을 Ground Truth 기반으로 정량 비교한다. FastAPI 서버로도 개별 프레임워크를 즉시 테스트할 수 있다.
 
-### 지원 프레임워크
+### Supported Frameworks
 
 | 프레임워크 | 모드 | 구조화 방식 |
 |-----------|------|-----------|
@@ -19,30 +19,22 @@ Pydantic 스키마와 프롬프트를 정의하고, 여러 프레임워크에 �
 
 ---
 
-## 목차
+## Table of Contents
 
-- [왜 struct-bench인가?](#왜-struct-bench인가)
-- [실험 배경](#실험-배경)
-- [실험 설계](#실험-설계)
-  - [3가지 실험 조합](#3가지-실험-조합)
-  - [프롬프트 설계](#프롬프트-설계)
-- [프레임워크별 동작 원리](#프레임워크별-동작-원리)
-- [벤치마크 결과](#벤치마크-결과)
-  - [종합 결과 매트릭스](#종합-결과-매트릭스)
-  - [채점 기준](#채점-기준)
-- [결과 분석](#결과-분석)
-  - [조합 C (Rich Prompt): 프레임워크 무관하게 수렴](#1-조합-c-rich-prompt--모든-프레임워크가-96로-수렴)
-  - [Tool Calling과 Description 전달](#2-tool-calling이-description을-전달하는-프레임워크만-ab에서-높은-점수)
-  - [JSON Schema 방식의 한계](#3-json-schema-방식-xgrammar은-ab에서-중간-성능)
-  - [저성능 프레임워크 분석](#4-일부-프레임워크는-ab에서-매우-낮은-성능)
-  - [Description 필드 효과](#5-description-필드-효과-a-vs-b--미미함)
-  - [Literal 타입 문제](#6-literal-타입-문제)
-- [결론](#결론)
-- [실행 방법](#실행-방법)
+- [Motivation](#motivation)
+- [Background](#background)
+- [Experiment Design](#experiment-design)
+- [How Each Framework Works](#how-each-framework-works)
+- [Benchmark Results](#benchmark-results)
+- [Analysis](#analysis)
+- [Conclusion](#conclusion)
+- [Getting Started](#getting-started)
+- [Dependencies](#dependencies)
+- [References](#references)
 
 ---
 
-## 왜 struct-bench인가?
+## Motivation
 
 LLM에서 Pydantic 모델 형태의 구조화된 출력을 얻기 위한 프레임워크가 많아졌다. Instructor, LangChain, Marvin, PydanticAI, Mirascope, Guardrails 등 각각 다른 방식으로 동일한 문제를 풀고 있다. 하지만 **같은 모델, 같은 스키마, 같은 프롬프트를 넣었을 때 과연 결과가 동일한가?**
 
@@ -53,7 +45,7 @@ struct-bench는 이 질문에 답하기 위한 도구이다:
 - **API 서버**: FastAPI 기반으로 개별 프레임워크를 즉시 테스트 가능
 - **확장 가능**: 새 프레임워크는 `BaseFrameworkAdapter`를 상속하고 `@register` 데코레이터만 붙이면 추가
 
-### 핵심 질문
+### Key Questions
 
 1. 프레임워크마다 Pydantic 스키마의 `Field(description=...)` 을 LLM에 전달하는 방식이 다른가?
 2. 프롬프트에 필드 설명을 명시하는 것과 스키마의 description에 의존하는 것 중 무엇이 더 효과적인가?
@@ -61,9 +53,9 @@ struct-bench는 이 질문에 답하기 위한 도구이다:
 
 ---
 
-## 실험 배경
+## Background
 
-### 구조화 출력의 3가지 접근법
+### 3 Approaches to Structured Output
 
 LLM에서 구조화된 출력을 얻는 방식은 크게 3가지로 나뉜다:
 
@@ -75,7 +67,7 @@ LLM에서 구조화된 출력을 얻는 방식은 크게 3가지로 나뉜다:
 
 각 프레임워크는 이 방식 중 하나 이상을 사용한다. Instructor는 Function Calling과 JSON Schema 모드를 모두 지원하고, OpenAI Native SDK는 `response_format`으로 JSON Schema를 전달하여 xgrammar가 토큰을 제약한다. LangChain 역시 두 방식을 모두 제공한다.
 
-### 실험의 시작: vLLM에서 description이 무시되는 문제
+### The Problem: vLLM Ignores Schema Descriptions
 
 이 프로젝트는 vLLM 환경에서 Pydantic 스키마의 `Field(description=...)` 을 꼼꼼히 작성하여 structured output을 추출했는데, **예상과 다르게 description이 전혀 반영되지 않는 결과**가 나오면서 시작되었다. 분명히 같은 모델인데 왜 프레임워크마다 결과가 다른지 의심을 갖고 조사한 결과, 핵심 원인을 발견하였다:
 
@@ -88,7 +80,7 @@ vLLM의 xgrammar는 JSON Schema의 description 필드를 완전히 무시한다.
 
 ---
 
-## 실험 설계
+## Experiment Design
 
 동일한 Pydantic 스키마를 두 가지 버전으로 준비하였다:
 
@@ -97,7 +89,7 @@ vLLM의 xgrammar는 JSON Schema의 description 필드를 완전히 무시한다.
 
 10건의 테스트 문서와 Ground Truth를 준비하고, 7개 프레임워크(9개 모드) × 3가지 조합 = 총 **270건**의 실험을 수행하였다.
 
-### 3가지 실험 조합
+### 3 Test Combinations
 
 | 조합 | 스키마 | 프롬프트 | 실험 의도 |
 |------|--------|---------|----------|
@@ -105,7 +97,7 @@ vLLM의 xgrammar는 JSON Schema의 description 필드를 완전히 무시한다.
 | **B: Schema(no desc) + Prompt(minimal)** | description 없음 | 필드 설명 없는 최소 프롬프트 | 아무 설명도 없을 때의 기저(baseline) 성능 측정 |
 | **C: Schema(no desc) + Prompt(rich)** | description 없음 | 모든 필드 설명이 포함된 상세 프롬프트 | 프롬프트로만 설명을 제공했을 때의 성능 측정 |
 
-### 프롬프트 설계
+### Prompt Design
 
 **Minimal Prompt**: 최소한의 지시만 포함 ("Extract structured information from the given text.")
 
@@ -113,9 +105,10 @@ vLLM의 xgrammar는 JSON Schema의 description 필드를 완전히 무시한다.
 
 ---
 
-## 프레임워크별 동작 원리
+## How Each Framework Works
 
-### 1. Instructor (tools / json_schema 모드)
+<details>
+<summary><b>Instructor</b> — Tool Calling / JSON Schema, 자동 retry 및 validation 내장</summary>
 
 ```python
 client = instructor.from_provider("ollama/model", base_url=...)
@@ -127,7 +120,10 @@ result = client.chat.completions.create(
 
 `instructor.from_provider()`는 Tool Calling 방식으로 Pydantic 스키마를 tool definition에 넣어 전달한다. description 필드가 tool definition에 포함되므로 LLM이 필드의 의미를 파악할 수 있다. 자동 retry 및 validation이 내장되어 있다. `json_schema` 모드에서는 `response_format` 기반으로 동작한다.
 
-### 2. OpenAI Native
+</details>
+
+<details>
+<summary><b>OpenAI Native</b> — JSON Schema (response_format), xgrammar가 description 무시</summary>
 
 ```python
 client.chat.completions.parse(
@@ -139,7 +135,10 @@ client.chat.completions.parse(
 
 OpenAI SDK의 `parse()` 메서드를 사용하며, JSON Schema를 `response_format`으로 전달한다. vLLM의 xgrammar가 구조를 강제하지만, **description 필드를 무시**하고 `type`, `properties`, `required` 등 구조적 제약만 사용한다.
 
-### 3. LangChain (json_schema / function_calling 모드)
+</details>
+
+<details>
+<summary><b>LangChain</b> — json_schema / function_calling 두 가지 모드 지원</summary>
 
 ```python
 llm = ChatOpenAI(model=model, base_url=...)
@@ -149,7 +148,10 @@ result = await structured_llm.ainvoke(messages)
 
 `json_schema` 모드에서는 `response_format` 기반으로 동작하고, `function_calling` 모드에서는 Tool Calling 방식으로 동작한다.
 
-### 4. Marvin
+</details>
+
+<details>
+<summary><b>Marvin</b> — pydantic_ai 기반 Tool Calling, description 전달됨</summary>
 
 ```python
 provider = OpenAIProvider(base_url=..., api_key=...)
@@ -160,7 +162,10 @@ result = agent.run(text, result_type=schema_class)
 
 pydantic_ai의 `OpenAIModel`/`OpenAIProvider`로 모델을 주입한 뒤 `marvin.Agent`를 통해 추출한다. 내부적으로 Tool Calling 방식을 사용하므로 description이 전달된다.
 
-### 5. PydanticAI
+</details>
+
+<details>
+<summary><b>PydanticAI</b> — Agent + output_type, Tool Calling 방식</summary>
 
 ```python
 model = OpenAIModel(model_name, provider=OpenAIProvider(base_url=...))
@@ -170,7 +175,10 @@ result = await agent.run(text)
 
 `Agent`에 `output_type`으로 스키마를 전달하며, Tool Calling 방식으로 동작한다.
 
-### 6. Mirascope
+</details>
+
+<details>
+<summary><b>Mirascope</b> — ollama provider 등록, @call 데코레이터 방식</summary>
 
 ```python
 register_provider("ollama", scope="ollama/", base_url=...)
@@ -182,7 +190,10 @@ def do_extract(text, sys_prompt):
 
 `mirascope.llm.call` 데코레이터와 `format=schema_class`를 사용한다. ollama provider로 등록하여 vLLM에 연결하며, Tool Calling 방식으로 동작한다.
 
-### 7. Guardrails
+</details>
+
+<details>
+<summary><b>Guardrails</b> — litellm 경유, hosted_vllm provider</summary>
 
 ```python
 guard = Guard.for_pydantic(output_class=schema_class)
@@ -195,11 +206,13 @@ result = guard(
 
 내부적으로 litellm을 사용하며, `hosted_vllm/` provider로 vLLM에 연결한다.
 
+</details>
+
 ---
 
-## 벤치마크 결과
+## Benchmark Results
 
-### 종합 결과 매트릭스
+### Result Matrix
 
 ```
   Framework/Mode                       A_desc     B_nodesc       C_rich    Overall
@@ -219,15 +232,15 @@ result = guard(
 
 > `(NF)` = 10건 중 N건 실패 (파싱 에러 또는 validation 실패). `ALL FAIL` = 10건 모두 실패.
 
-### 채점 기준
+### Scoring
 
 Ground Truth 기반 100점 만점 채점 방식을 사용하였다. 12개 카테고리로 나뉘며, 각 항목은 키워드 매칭, 개수 일치, 정확도 등을 종합적으로 평가한다.
 
 ---
 
-## 결과 분석
+## Analysis
 
-### 1. 조합 C (Rich Prompt) : 모든 프레임워크가 ~96%로 수렴
+### 1. Rich Prompt → 모든 프레임워크가 ~96%로 수렴
 
 가장 두드러진 결과는, 프롬프트에 필드 설명을 상세히 넣은 조합 C에서 **모든 프레임워크가 95.5~96.0%로 수렴**했다는 점이다.
 
@@ -238,50 +251,47 @@ Ground Truth 기반 100점 만점 채점 방식을 사용하였다. 12개 카테
 
 프롬프트에 필드 설명을 명시하면 프레임워크 간 성능 차이가 사실상 사라진다. 이는 LLM이 "무엇을 추출해야 하는가"에 대한 정보를 프롬프트에서 직접 얻을 수 있기 때문이다.
 
-### 2. Tool Calling이 Description을 전달하는 프레임워크만 A/B에서 높은 점수
+### 2. Tool Calling 방식만 A/B에서 고성능
 
 프롬프트에 설명이 없는 조합 A/B에서도 높은 점수를 유지한 프레임워크들이 있다:
 
 - **Instructor** (94.6~95.5%): `from_provider`가 tool definition에 description을 포함하여 전달
 - **Marvin** (93.5~94.4%): pydantic_ai 기반 Tool Calling으로 description 전달
 
-이 프레임워크들은 스키마의 description만으로도 높은 성능을 보였다. 공통점은 **Tool Calling 방식으로 description을 LLM에 직접 전달**한다는 것이다.
+공통점은 **Tool Calling 방식으로 description을 LLM에 직접 전달**한다는 것이다.
 
-### 3. JSON Schema 방식 (xgrammar)은 A/B에서 중간 성능
+### 3. JSON Schema (xgrammar) → A/B에서 중간 성능
 
 - **OpenAI Native**: 82.5~85.2%
 - **LangChain json_schema**: 81.1~84.0%
 
-이 프레임워크들은 `response_format`으로 JSON Schema를 전달하지만, vLLM의 xgrammar가 description을 무시하기 때문에 구조만 강제되고 의미 정보가 부족하다. 그 결과 A/B에서 중간 수준의 성능에 머문다.
+`response_format`으로 JSON Schema를 전달하지만, vLLM의 xgrammar가 description을 무시하기 때문에 구조만 강제되고 의미 정보가 부족하다.
 
-### 4. 일부 프레임워크는 A/B에서 매우 낮은 성능
+### 4. A/B에서 저성능 프레임워크
 
 - **PydanticAI** (38~40%): Tool Calling 방식이지만, NoDesc 스키마에서 description이 없으면 tool definition에도 설명이 포함되지 않아 낮은 성능
 - **Mirascope** (34~35%): Literal 타입 validation 실패가 빈번하게 발생 (10건 중 5건 실패)
 - **Guardrails** (6~8%): litellm을 경유하면서 description 전달이 불안정하고, 10건 중 6~7건이 실패
 
-### 5. Description 필드 효과 (A vs B) : 미미함
+### 5. Schema Description 효과 (A vs B) → 미미
 
 | 조합 | 전체 평균 | 실패 수 |
 |------|----------|---------|
 | A (desc + minimal) | 73.6% | 22건 실패 |
 | B (no desc + minimal) | 76.0% | 24건 실패 |
 
-A와 B의 차이는 2.4%p로 거의 없다. 이는 두 가지를 의미한다:
+A와 B의 차이는 2.4%p로 거의 없다. JSON Schema 방식에서는 xgrammar가 무시하고, Tool Calling 방식에서는 필드명만으로도 어느 정도 추론이 가능하기 때문이다.
 
-1. JSON Schema 방식의 프레임워크에서는 description이 xgrammar에 의해 무시되므로 차이가 없음
-2. Tool Calling 방식의 프레임워크에서는 A의 description이 전달되지만, B에서도 필드명만으로 어느 정도 추론이 가능하여 큰 차이가 나지 않음
-
-### 6. Literal 타입 문제
+### 6. Literal Type Issue
 
 스키마에 포함된 `Literal` 타입 제약이 실패의 주요 원인이었다. LLM이 정확한 Literal 값 대신 유사한 값을 생성하는 경우가 빈번하였으며, 이로 인해 Pydantic validation error가 발생한다. `langchain/function_calling`이 조합 A/B에서 전부 실패한 주요 원인이기도 하다.
 
 ---
 
-## 결론
+## Conclusion
 
 ```
-핵심 발견:
+Key Findings:
   1. 프롬프트 엔지니어링 >> 프레임워크 선택
   2. Rich Prompt 사용 시 모든 프레임워크가 ~96%로 동일한 성능
   3. 스키마 description에만 의존하면 Tool Calling 계열에서만 효과 있음
@@ -296,34 +306,32 @@ A와 B의 차이는 2.4%p로 거의 없다. 이는 두 가지를 의미한다:
 
 ---
 
-## 실행 방법
+## Getting Started
 
-### 사전 요구사항
+### Prerequisites
 
-- Python 3.12 이상
-- [uv](https://docs.astral.sh/uv/) 패키지 매니저
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
 - OpenAI API 호환 서버 (vLLM 등)
 
-### 설치
+### Install
 
 ```bash
 uv sync
 ```
 
-### 벤치마크 실행
+### Run Benchmark
 
 ```bash
 cd tests
 uv run run_multi_resume_benchmark.py
 ```
 
-### FastAPI 서버 실행
+### Run API Server
 
 ```bash
 uv run uvicorn app.main:app --reload
 ```
-
-개별 프레임워크를 API로 테스트할 수 있다:
 
 ```bash
 curl -X POST http://localhost:8000/api/extract \
@@ -341,7 +349,7 @@ curl -X POST http://localhost:8000/api/extract \
 
 ---
 
-## 의존성
+## Dependencies
 
 | 패키지 | 용도 |
 |--------|------|
@@ -357,7 +365,7 @@ curl -X POST http://localhost:8000/api/extract \
 
 ---
 
-## 참고 자료
+## References
 
 - [The best library for structured LLM output](https://simmering.dev/blog/structured_output/) — Paul Simmering
 - [llm-structured-output-benchmarks](https://github.com/stephenleo/llm-structured-output-benchmarks) — Stephen Leo
@@ -365,6 +373,6 @@ curl -X POST http://localhost:8000/api/extract \
 
 ---
 
-## 라이선스
+## License
 
 MIT License
