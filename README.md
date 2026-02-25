@@ -16,6 +16,7 @@ Pydantic 스키마와 프롬프트를 정의하고, 여러 프레임워크에 �
 | **PydanticAI** | default | Tool Calling | [docs](https://ai.pydantic.dev/output/) |
 | **Mirascope** | default | Tool Calling | [docs](https://mirascope.com/docs/mirascope/guides/getting-started/structured-outputs/) |
 | **Guardrails** | default | litellm 경유 | [docs](https://www.guardrailsai.com/docs/how_to_guides/generate_structured_data) |
+| **LlamaIndex** | default | Tool Calling (OpenAIPydanticProgram) | [docs](https://docs.llamaindex.ai/en/stable/module_guides/querying/structured_outputs/) |
 
 ---
 
@@ -36,7 +37,7 @@ Pydantic 스키마와 프롬프트를 정의하고, 여러 프레임워크에 �
 
 ## Motivation
 
-LLM에서 Pydantic 모델 형태의 구조화된 출력을 얻기 위한 프레임워크가 많아졌다. Instructor, LangChain, Marvin, PydanticAI, Mirascope, Guardrails 등 각각 다른 방식으로 동일한 문제를 풀고 있다. 하지만 **같은 모델, 같은 스키마, 같은 프롬프트를 넣었을 때 과연 결과가 동일한가?**
+LLM에서 Pydantic 모델 형태의 구조화된 출력을 얻기 위한 프레임워크가 많아졌다. Instructor, LangChain, Marvin, PydanticAI, Mirascope, Guardrails, LlamaIndex 등 각각 다른 방식으로 동일한 문제를 풀고 있다. 하지만 **같은 모델, 같은 스키마, 같은 프롬프트를 넣었을 때 과연 결과가 동일한가?**
 
 struct-bench는 이 질문에 답하기 위한 도구이다:
 
@@ -208,6 +209,27 @@ result = guard(
 
 </details>
 
+<details>
+<summary><b>LlamaIndex</b> — OpenAIPydanticProgram, Function Calling 기반 구조화 추출</summary>
+
+```python
+from llama_index.llms.openai_like import OpenAILike
+from llama_index.program.openai import OpenAIPydanticProgram
+
+llm = OpenAILike(model=model, api_base=base_url, api_key=api_key,
+                 is_chat_model=True, is_function_calling_model=True)
+program = OpenAIPydanticProgram.from_defaults(
+    output_cls=schema_class,
+    prompt_template_str="{system_prompt}\n\n{text}",
+    llm=llm,
+)
+result = program(system_prompt=prompt, text=text)
+```
+
+`OpenAIPydanticProgram`은 Pydantic 스키마를 Function Calling의 tool definition으로 변환하여 전달한다. `OpenAILike`로 vLLM 등 OpenAI 호환 서버에 연결할 수 있다. description이 tool definition에 포함되므로 LLM이 필드의 의미를 파악할 수 있다.
+
+</details>
+
 ---
 
 ## Benchmark Results
@@ -360,6 +382,8 @@ curl -X POST http://localhost:8000/api/extract \
 | `pydantic-ai` | PydanticAI agent framework |
 | `mirascope` | Mirascope LLM call framework |
 | `guardrails-ai` | Guardrails validation framework |
+| `llama-index-program-openai` | LlamaIndex OpenAIPydanticProgram |
+| `llama-index-llms-openai-like` | LlamaIndex OpenAI 호환 서버 연결 |
 | `fastapi` / `uvicorn` | API 서버 |
 | `pydantic` / `pydantic-settings` | 스키마 정의 및 설정 관리 |
 

@@ -6,4 +6,5 @@ from app.frameworks import (  # noqa: F401
     langchain_fw,
     pydantic_ai_fw,
     guardrails_fw,
+    llamaindex_fw,
 )
