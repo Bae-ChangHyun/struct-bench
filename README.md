@@ -30,7 +30,6 @@ Pydantic 스키마와 프롬프트를 정의하고, 여러 프레임워크에 �
 - [Analysis](#analysis)
 - [Conclusion](#conclusion)
 - [Getting Started](#getting-started)
-- [Dependencies](#dependencies)
 - [References](#references)
 
 ---
@@ -368,24 +367,6 @@ curl -X POST http://localhost:8000/api/extract \
     "base_url": "http://your-server/v1"
   }'
 ```
-
----
-
-## Dependencies
-
-| 패키지 | 용도 |
-|--------|------|
-| `instructor` | Tool Calling / JSON Schema 기반 structured output |
-| `openai` | OpenAI Native SDK (response_format) |
-| `langchain-openai` | LangChain structured output |
-| `marvin` | Marvin AI agent framework |
-| `pydantic-ai` | PydanticAI agent framework |
-| `mirascope` | Mirascope LLM call framework |
-| `guardrails-ai` | Guardrails validation framework |
-| `llama-index-program-openai` | LlamaIndex OpenAIPydanticProgram |
-| `llama-index-llms-openai-like` | LlamaIndex OpenAI 호환 서버 연결 |
-| `fastapi` / `uvicorn` | API 서버 |
-| `pydantic` / `pydantic-settings` | 스키마 정의 및 설정 관리 |
 
 ---
 
