@@ -1,0 +1,9 @@
+name: extract_deepjsoneval_minimal
+description: "DeepJSONEval deep-nested JSON extraction (minimal prompt - no field descriptions)"
+version: "1.0"
+system_prompt: |
+  You are a data extraction assistant.
+  Extract structured information from the given text into the specified JSON schema.
+  The output must be a valid JSON object conforming to the provided schema.
+  Preserve original values as they appear in the text (numbers, dates, names, etc.).
+  If a field is not present in the text, use null or the appropriate default value.
