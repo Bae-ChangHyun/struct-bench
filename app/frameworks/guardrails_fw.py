@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from guardrails import AsyncGuard
@@ -9,6 +10,27 @@ from app.frameworks.registry import FrameworkRegistry
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
+
+
+def _resolve_refs(schema: dict) -> dict:
+    """JSON Schema의 $ref를 inline으로 풀어준다 (vLLM 호환)."""
+    defs = schema.get("$defs", {})
+
+    def _resolve(node):
+        if isinstance(node, dict):
+            if "$ref" in node:
+                ref_name = node["$ref"].rsplit("/", 1)[-1]
+                if ref_name in defs:
+                    return _resolve(defs[ref_name])
+                return node
+            return {k: _resolve(v) for k, v in node.items() if k != "$defs"}
+        if isinstance(node, list):
+            return [_resolve(item) for item in node]
+        return node
+
+    resolved = _resolve(schema)
+    resolved.pop("$defs", None)
+    return resolved
 
 
 @FrameworkRegistry.register("guardrails")
@@ -30,6 +52,11 @@ class GuardrailsAdapter(BaseFrameworkAdapter):
         api_key = self.api_key or "dummy"
         api_base = self.base_url
 
+        # $ref를 inline으로 풀어서 response_format에 전달
+        # vLLM은 $ref를 해석하지 못하므로 json_schema 모드로 구조화 출력 강제
+        raw_schema = schema_class.model_json_schema()
+        inlined_schema = _resolve_refs(raw_schema)
+
         result = await guard(
             model=model_name,
             api_base=api_base,
@@ -39,6 +66,14 @@ class GuardrailsAdapter(BaseFrameworkAdapter):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text},
             ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_class.__name__,
+                    "strict": True,
+                    "schema": inlined_schema,
+                },
+            },
         )
 
         if result.validation_passed and result.validated_output:
