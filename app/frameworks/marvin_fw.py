@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import marvin
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from app.frameworks.base import BaseFrameworkAdapter, ExtractionResult
@@ -23,7 +23,7 @@ class MarvinAdapter(BaseFrameworkAdapter):
             base_url=self.base_url,
             api_key=self.api_key or "dummy",
         )
-        model = OpenAIChatModel(self.model, provider=provider)
+        model = OpenAIModel(self.model, provider=provider)
         return marvin.Agent(model=model, instructions=system_prompt)
 
     async def extract(
@@ -41,7 +41,12 @@ class MarvinAdapter(BaseFrameworkAdapter):
                 instructions=system_prompt,
                 agent=agent,
             )
-            result = results[0] if results else schema_class()
+            if not results:
+                return ExtractionResult(
+                    success=False,
+                    error="extract_async returned empty list",
+                )
+            result = results[0]
         else:
             result = await marvin.cast_async(
                 data=text,
