@@ -187,6 +187,7 @@ async def run_benchmark(
 
                 result_entry: dict[str, Any] = {
                     "dataset": adapter.name,
+                    "model": model,
                     "combination": combo["id"],
                     "framework": fw,
                     "mode": mode,
@@ -227,9 +228,14 @@ def print_summary(all_results: list[dict], fw_modes: list[tuple[str, str]], comb
     """터미널에 최종 요약 테이블 출력."""
     combos = combos or COMBINATIONS
 
+    # 모델명 추출 (결과에서)
+    models = sorted(set(r.get("model", "") for r in all_results if r.get("model")))
+    model_str = ", ".join(models) if models else "unknown"
+
     summary_lines = []
     summary_lines.append(f"{'='*90}")
     summary_lines.append(f" FINAL SUMMARY: Average Score by Framework × Combination")
+    summary_lines.append(f" Model: {model_str}")
     summary_lines.append(f"{'='*90}")
     header = f"  {'Framework/Mode':<30}"
     for combo in combos:
