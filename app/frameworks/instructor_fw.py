@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import functools
 from typing import Any, TYPE_CHECKING
 
 import instructor
-from instructor.processing import schema as _instructor_schema
-from instructor.providers.openai import utils as _instructor_openai_utils
 from openai import AsyncOpenAI
 
 from app.frameworks.base import BaseFrameworkAdapter, ExtractionResult
@@ -24,47 +23,6 @@ _MODE_MAP = {
 }
 
 
-# Monkeypatch instructor's generate_openai_schema to resolve $ref.
-# instructor sends $defs/$ref to the API, which vLLM models cannot interpret.
-_original_generate_openai_schema = _instructor_schema.generate_openai_schema.__wrapped__
-
-
-def _patched_generate_openai_schema(model: type) -> dict[str, Any]:
-    result = _original_generate_openai_schema(model)
-    if "$defs" in result.get("parameters", {}):
-        result = {
-            **result,
-            "parameters": resolve_refs(result["parameters"].copy()),
-        }
-    return result
-
-
-_instructor_schema.generate_openai_schema = _patched_generate_openai_schema  # type: ignore[assignment]
-# Also patch the already-bound reference in openai utils (from ... import)
-_instructor_openai_utils.generate_openai_schema = _patched_generate_openai_schema  # type: ignore[assignment]
-
-
-# JSON_SCHEMA 모드는 generate_openai_schema를 안 쓰고 model_json_schema()를 직접 호출.
-# handle_json_modes도 패치하여 $ref를 inline 처리.
-_original_handle_json_modes = _instructor_openai_utils.handle_json_modes
-
-
-def _patched_handle_json_modes(
-    response_model: type[Any] | None, new_kwargs: dict[str, Any], mode: Any
-) -> tuple[type[Any] | None, dict[str, Any]]:
-    result_model, result_kwargs = _original_handle_json_modes(response_model, new_kwargs, mode)
-    # response_format 내 json_schema의 $ref를 inline 처리
-    rf = result_kwargs.get("response_format")
-    if isinstance(rf, dict) and "json_schema" in rf:
-        schema = rf["json_schema"].get("schema", {})
-        if "$defs" in schema:
-            rf["json_schema"]["schema"] = resolve_refs(schema.copy())
-    return result_model, result_kwargs
-
-
-_instructor_openai_utils.handle_json_modes = _patched_handle_json_modes  # type: ignore[assignment]
-
-
 @FrameworkRegistry.register("instructor")
 class InstructorAdapter(BaseFrameworkAdapter):
     name = "instructor"
@@ -76,12 +34,34 @@ class InstructorAdapter(BaseFrameworkAdapter):
         schema_class: type[BaseModel],
         system_prompt: str,
     ) -> ExtractionResult:
+        # 동적 생성 모델에 docstring 없으면 vLLM이 description=None 거부
+        if not schema_class.__doc__:
+            schema_class.__doc__ = "Extracted structured data"
+
         mode = _MODE_MAP.get(self.mode, instructor.Mode.TOOLS)
 
-        client = instructor.from_openai(
-            AsyncOpenAI(base_url=self.base_url, api_key=self.api_key),
-            mode=mode,
-        )
+        base_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+
+        # vLLM의 tool_calling은 $ref를 해석하지 못하므로
+        # OpenAI 클라이언트 레벨에서 tool parameters의 $ref를 인라인 처리
+        _orig_create = base_client.chat.completions.create
+
+        @functools.wraps(_orig_create)
+        async def _vllm_compat_create(*args: Any, **kwargs: Any) -> Any:
+            tools = kwargs.get("tools")
+            if tools:
+                for tool in tools:
+                    func = tool.get("function", {})
+                    if func.get("description") is None:
+                        func["description"] = "Extract structured data"
+                    params = func.get("parameters", {})
+                    if "$defs" in params:
+                        func["parameters"] = resolve_refs(params)
+            return await _orig_create(*args, **kwargs)
+
+        base_client.chat.completions.create = _vllm_compat_create  # type: ignore[assignment]
+
+        client = instructor.from_openai(base_client, mode=mode)
 
         result = await client.chat.completions.create(
             model=self.model,
