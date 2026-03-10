@@ -210,11 +210,17 @@ async def run_benchmark(
                 all_results.append(result_entry)
                 fw_results.append(result_entry)
 
-            # 조합별 평균
+            # 조합별 평균 (성공 케이스 + 전체)
             ok = [s for s in combo_scores if s > 0]
-            avg = sum(ok) / len(ok) if ok else 0
             fail_cnt = len(combo_scores) - len(ok)
-            logger.info(f"→ {label:30s} {combo['id']:8s} AVG={avg:>5.1f}%  (fail={fail_cnt}/{len(combo_scores)})")
+            avg_ok = sum(ok) / len(ok) if ok else 0
+            avg_all = sum(combo_scores) / len(combo_scores) if combo_scores else 0
+            logger.info(
+                f"→ {label:30s} {combo['id']:8s} "
+                f"AVG={avg_ok:>5.1f}% (success only)  "
+                f"AVG_ALL={avg_all:>5.1f}% (incl. fail)  "
+                f"(fail={fail_cnt}/{len(combo_scores)})"
+            )
 
         # 프레임워크 완료 시 개별 파일 저장
         if output_dir:
@@ -254,10 +260,11 @@ def print_summary(all_results: list[dict], fw_modes: list[tuple[str, str]], comb
                 if r["combination"] == combo["id"] and r["framework"] == fw and r["mode"] == mode
             ]
             ok = [r["score_pct"] for r in subset if r["score_pct"] > 0]
+            all_scores = [r["score_pct"] for r in subset]
             fail = len(subset) - len(ok)
             if ok:
                 avg = sum(ok) / len(ok)
-                overall.extend(ok)
+                overall.extend(all_scores)
                 row += f" {avg:>7.1f}%({fail}F)" if fail else f" {avg:>10.1f}%"
             else:
                 row += f" {'ALL FAIL':>12}"
@@ -271,9 +278,9 @@ def print_summary(all_results: list[dict], fw_modes: list[tuple[str, str]], comb
     combo_avg_row = f"\n  {'COMBINATION AVG':<30}"
     for combo in combos:
         subset = [r for r in all_results if r["combination"] == combo["id"]]
-        ok = [r["score_pct"] for r in subset if r["score_pct"] > 0]
-        avg = sum(ok) / len(ok) if ok else 0
-        fail = len(subset) - len(ok)
+        all_scores = [r["score_pct"] for r in subset]
+        fail = len(subset) - len([s for s in all_scores if s > 0])
+        avg = sum(all_scores) / len(all_scores) if all_scores else 0
         combo_avg_row += f" {avg:>7.1f}%({fail}F)"
     summary_lines.append(combo_avg_row)
 

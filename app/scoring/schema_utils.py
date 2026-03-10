@@ -16,6 +16,8 @@ def resolve_ref(ref: str, root_schema: dict) -> dict:
     parts = ref.lstrip("#/").split("/")
     node = root_schema
     for p in parts:
+        if not isinstance(node, dict) or p not in node:
+            return {}
         node = node[p]
     return node
 
@@ -25,20 +27,20 @@ def resolve_schema(schema: dict, root_schema: dict) -> dict:
     if "$ref" in schema:
         resolved = resolve_ref(schema["$ref"], root_schema)
         merged = {**resolved}
-        for key in ("description", "evaluation_config"):
-            if key in schema:
-                merged[key] = schema[key]
+        if "description" in schema:
+            merged["description"] = schema["description"]
         return merged
 
     if "anyOf" in schema:
         non_null = [s for s in schema["anyOf"] if s.get("type") != "null"]
         if len(non_null) == 1:
             inner = {**non_null[0]}
-            for key in ("description", "evaluation_config"):
+            for key in ("description",):
                 if key in schema and key not in inner:
                     inner[key] = schema[key]
             return resolve_schema(inner, root_schema)
-        # 복잡한 anyOf: 첫 번째 non-null 사용
+        # 복잡한 anyOf (union type): 첫 번째 non-null 타입으로 fallback
+        # 실제 비교 시 compare_leaf에서 타입 변환을 시도하므로 대부분 동작함
         if non_null:
             return resolve_schema(non_null[0], root_schema)
 

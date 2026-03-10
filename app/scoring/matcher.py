@@ -37,15 +37,6 @@ def _stable_str(obj: Any) -> str:
     return str(obj)
 
 
-def _is_absent(v: Any) -> bool:
-    """값이 없는 것으로 간주되는지 확인."""
-    if v is None:
-        return True
-    if isinstance(v, str) and v.strip() in ("", "null", "None"):
-        return True
-    return False
-
-
 def _extract_fields(obj: Any) -> dict[str, str]:
     """객체의 모든 필드를 key→string 형태로 추출 (비어있지 않은 값만)."""
     if not isinstance(obj, dict):
