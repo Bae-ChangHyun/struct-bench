@@ -11,16 +11,16 @@ Pydantic 스키마와 프롬프트를 정의하고, 여러 프레임워크에 �
 
 ### Supported Frameworks
 
-| 프레임워크 | 모드 | 구조화 방식 | Docs |
-|-----------|------|-----------|------|
-| **[Instructor](https://python.useinstructor.com/)** | [tools, tools_strict](https://python.useinstructor.com/modes-comparison/), [json](https://python.useinstructor.com/concepts/patching/#json-mode), [json_schema](https://python.useinstructor.com/concepts/patching/#json-schema-mode), [md_json](https://python.useinstructor.com/concepts/patching/#markdown-json-mode) | Tool Calling / JSON Schema | [modes](https://python.useinstructor.com/modes-comparison/) |
-| **[OpenAI Native](https://platform.openai.com/)** | [default](https://platform.openai.com/docs/guides/structured-outputs) (parse), [tool_calling](https://platform.openai.com/docs/guides/function-calling), [json_object](https://platform.openai.com/docs/api-reference/chat/create) | JSON Schema / Tool Calling / JSON Object | [guide](https://platform.openai.com/docs/guides/structured-outputs) |
-| **[LangChain](https://python.langchain.com/)** | [json_schema, function_calling, json_mode](https://python.langchain.com/docs/concepts/structured_outputs/) | JSON Schema / Tool Calling / JSON Mode | [guide](https://python.langchain.com/docs/concepts/structured_outputs/) |
-| **[Marvin](https://askmarvin.ai/)** | [cast](https://askmarvin.ai/functions/cast), [extract](https://askmarvin.ai/functions/extract) | Tool Calling (cast_async / extract_async) | [docs](https://askmarvin.ai/) |
-| **[PydanticAI](https://ai.pydantic.dev/)** | [tool](https://ai.pydantic.dev/output/#tooloutput) (ToolOutput), [json](https://ai.pydantic.dev/output/#nativeoutput) (NativeOutput), [text](https://ai.pydantic.dev/output/#textoutput) (TextOutput) | Tool Calling / JSON Schema / Text | [output](https://ai.pydantic.dev/output/) |
-| **[Mirascope](https://mirascope.com/)** | [tool, json, strict](https://mirascope.com/docs/mirascope/learn/response_models) | Tool Calling / JSON Mode / Strict Mode | [guide](https://mirascope.com/docs/mirascope/learn/response_models) |
-| **[Guardrails](https://www.guardrailsai.com/)** | [default](https://www.guardrailsai.com/docs/how_to_guides/structured_data_with_guardrails) | litellm 경유 (JSON Schema) | [guide](https://www.guardrailsai.com/docs/how_to_guides/structured_data_with_guardrails) |
-| **[LlamaIndex](https://docs.llamaindex.ai/)** | [text](https://docs.llamaindex.ai/en/stable/examples/output_parsing/llm_program/) (LLMTextCompletionProgram), [function_calling](https://docs.llamaindex.ai/en/stable/examples/output_parsing/function_program/) (FunctionCallingProgram) | Text Completion / Tool Calling | [guide](https://docs.llamaindex.ai/en/stable/module_guides/querying/structured_outputs/) |
+| 프레임워크 | 모드 | Docs |
+|-----------|------|------|
+| **[Instructor](https://python.useinstructor.com/)** | tools, tools_strict (Tool Calling) / json, json_schema, md_json (JSON Schema) | [docs](https://python.useinstructor.com/modes-comparison/) |
+| **[OpenAI Native](https://platform.openai.com/)** | default (JSON Schema) / tool_calling (Tool Calling) / json_object (JSON Object) | [docs](https://platform.openai.com/docs/guides/structured-outputs) |
+| **[LangChain](https://python.langchain.com/)** | json_schema (JSON Schema) / function_calling (Tool Calling) / json_mode (JSON Object) | [docs](https://python.langchain.com/docs/concepts/structured_outputs/) |
+| **[Marvin](https://askmarvin.ai/)** | cast, extract (Tool Calling) | [docs](https://askmarvin.ai/) |
+| **[PydanticAI](https://ai.pydantic.dev/)** | tool (Tool Calling) / json (JSON Schema) / text (Text Parsing) | [docs](https://ai.pydantic.dev/output/) |
+| **[Mirascope](https://mirascope.com/)** | tool (Tool Calling) / json (JSON Mode) / strict (JSON Schema) | [docs](https://mirascope.com/docs/mirascope/learn/response_models) |
+| **[Guardrails](https://www.guardrailsai.com/)** | default (JSON Schema via litellm) | [docs](https://www.guardrailsai.com/docs/how_to_guides/structured_data_with_guardrails) |
+| **[LlamaIndex](https://docs.llamaindex.ai/)** | text (Text Completion) / function_calling (Tool Calling) | [docs](https://docs.llamaindex.ai/en/stable/module_guides/querying/structured_outputs/) |
 
 ---
 
