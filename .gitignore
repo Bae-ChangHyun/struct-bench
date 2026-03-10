@@ -22,6 +22,8 @@ docs/
 .python-version
 tests/resumes/*.md
 tests/sample_*.md
+# Legacy test scripts (contain hardcoded server addresses)
+tests/run_*.py
 
 # Runtime data (downloaded datasets, cached texts)
 data/
