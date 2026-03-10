@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 
 class ExtractionRequest(BaseModel):
@@ -12,7 +12,7 @@ class ExtractionRequest(BaseModel):
     prompt_name: str = Field(description="사용할 프롬프트 템플릿 이름")
     model: str | None = Field(default=None, description="LLM 모델명 (기본값: 환경변수)")
     base_url: str | None = Field(default=None, description="OpenAI API base URL (기본값: 환경변수)")
-    api_key: str | None = Field(default=None, description="API 키 (기본값: 환경변수)")
+    api_key: SecretStr | None = Field(default=None, description="API 키 (기본값: 환경변수)")
     mode: str = Field(default="default", description="프레임워크 모드 (예: instructor의 json_schema, tools 등)")
 
 

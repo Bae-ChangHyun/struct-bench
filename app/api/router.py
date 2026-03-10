@@ -64,7 +64,7 @@ async def extract(req: ExtractionRequest) -> ExtractionResponse:
 
     model = req.model or settings.default_model
     base_url = req.base_url or settings.openai_base_url
-    api_key = req.api_key or settings.openai_api_key
+    api_key = req.api_key.get_secret_value() if req.api_key else settings.openai_api_key
 
     adapter = adapter_cls(
         model=model, base_url=base_url, api_key=api_key, mode=req.mode,
