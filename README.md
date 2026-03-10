@@ -84,10 +84,10 @@ vLLM의 xgrammar는 JSON Schema의 description 필드를 완전히 무시한다.
 
 동일한 Pydantic 스키마를 두 가지 버전으로 준비하였다:
 
-- **Description 포함 스키마**: 모든 필드에 `Field(description="...")` 포함 (60+ 필드, `Literal` 타입 제약 포함)
+- **Description 포함 스키마**: 모든 필드에 `Field(description="...")` 포함
 - **Description 없는 스키마**: 동일 구조이나 description 없이 타입과 기본값만 정의
 
-10건의 테스트 문서와 Ground Truth를 준비하고, 7개 프레임워크(9개 모드) × 3가지 조합 = 총 **270건**의 실험을 수행하였다.
+**DeepJSONEval** 데이터셋(다국어, 깊은 중첩 JSON 추출 벤치마크) 100건의 샘플과 Ground Truth를 사용하여, 8개 프레임워크(22개 모드) × 3가지 조합 = 총 **6,600건**의 실험을 수행하였다.
 
 ### 3 Test Combinations
 
@@ -154,15 +154,15 @@ AsyncOpenAI 기반으로 3가지 structured output 모드를 지원한다. **def
 </details>
 
 <details>
-<summary><b>LangChain</b> — json_schema / function_calling 두 가지 모드 지원</summary>
+<summary><b>LangChain</b> — json_schema / function_calling / json_mode 3가지 모드 지원</summary>
 
 ```python
 llm = ChatOpenAI(model=model, base_url=...)
-structured_llm = llm.with_structured_output(schema_class, method="json_schema")
+structured_llm = llm.with_structured_output(schema_class, method="json_schema")  # or "function_calling", "json_mode"
 result = await structured_llm.ainvoke(messages)
 ```
 
-`json_schema` 모드에서는 `response_format` 기반으로 동작하고, `function_calling` 모드에서는 Tool Calling 방식으로 동작한다.
+`json_schema` 모드에서는 `response_format` 기반으로 동작하고, `function_calling` 모드에서는 Tool Calling 방식으로 동작한다. `json_mode`는 `response_format={"type": "json_object"}`와 프롬프트 내 스키마 주입으로 동작한다.
 
 </details>
 
@@ -204,17 +204,18 @@ pydantic-ai v1.0.5 기준 `OpenAIChatModel`/`OpenAIProvider`로 모델을 설정
 </details>
 
 <details>
-<summary><b>Mirascope</b> — ollama provider 등록, @call 데코레이터 방식</summary>
+<summary><b>Mirascope</b> — openai provider 등록, @call 데코레이터 방식 (tool / json / strict)</summary>
 
 ```python
-register_provider("ollama", scope="ollama/", base_url=...)
+llm.register_provider("openai", scope="openai/model:completions", base_url=..., api_key=...)
+fmt = llm.format(schema_class, mode="tool")  # or "json", "strict"
 
-@call("ollama/model", format=schema_class)
-def do_extract(text, sys_prompt):
+@llm.call("openai/model:completions", format=fmt)
+async def do_extract(text: str, sys_prompt: str) -> str:
     return f"{sys_prompt}\n\n{text}"
 ```
 
-`mirascope.llm.call` 데코레이터와 `format=schema_class`를 사용한다. ollama provider로 등록하여 vLLM에 연결하며, Tool Calling 방식으로 동작한다.
+`mirascope.llm.call` 데코레이터와 `format=llm.format(schema_class, mode=...)`를 사용한다. openai provider로 vLLM에 연결하며, `:completions` suffix로 Chat Completions API를 강제한다. `tool` 모드는 Tool Calling, `json` 모드는 JSON Mode, `strict` 모드는 Strict JSON Schema로 동작한다.
 
 </details>
 
@@ -237,23 +238,25 @@ result = await guard(
 </details>
 
 <details>
-<summary><b>LlamaIndex</b> — OpenAIPydanticProgram, Function Calling 기반 구조화 추출</summary>
+<summary><b>LlamaIndex</b> — FunctionCallingProgram / LLMTextCompletionProgram 2가지 모드 지원</summary>
 
 ```python
 from llama_index.llms.openai_like import OpenAILike
-from llama_index.program.openai import OpenAIPydanticProgram
+from llama_index.core.program import FunctionCallingProgram, LLMTextCompletionProgram
 
 llm = OpenAILike(model=model, api_base=base_url, api_key=api_key,
                  is_chat_model=True, is_function_calling_model=True)
-program = OpenAIPydanticProgram.from_defaults(
-    output_cls=schema_class,
-    prompt_template_str="{system_prompt}\n\n{text}",
-    llm=llm,
-)
-result = program(system_prompt=prompt, text=text)
+
+# function_calling 모드: Tool Calling 기반
+program = FunctionCallingProgram.from_defaults(output_cls=schema_class, llm=llm, prompt=prompt_tpl)
+
+# text 모드: LLM이 텍스트로 JSON을 생성하고 Pydantic으로 파싱
+program = LLMTextCompletionProgram.from_defaults(output_cls=schema_class, llm=llm, prompt=prompt_tpl)
+
+result = await program.acall(system_prompt=prompt, text=text)
 ```
 
-`OpenAIPydanticProgram`은 Pydantic 스키마를 Function Calling의 tool definition으로 변환하여 전달한다. `OpenAILike`로 vLLM 등 OpenAI 호환 서버에 연결할 수 있다. description이 tool definition에 포함되므로 LLM이 필드의 의미를 파악할 수 있다.
+`FunctionCallingProgram`은 Pydantic 스키마를 Function Calling의 tool definition으로 변환하여 전달한다. `LLMTextCompletionProgram`은 LLM에게 텍스트로 JSON을 생성하도록 지시하고 Pydantic으로 파싱한다. `OpenAILike`로 vLLM 등 OpenAI 호환 서버에 연결할 수 있다.
 
 </details>
 
@@ -261,76 +264,93 @@ result = program(system_prompt=prompt, text=text)
 
 ## Benchmark Results
 
+> **Model**: `openai/gpt-oss-120b` (vLLM) | **Dataset**: DeepJSONEval 100 samples | **Total**: 6,600 tests
+
+> [!IMPORTANT]
+> 아래 결과는 **특정 모델(`gpt-oss-120b`) + 특정 서빙 환경(vLLM)** 에서의 측정값이다. 모델이 달라지면 결과가 전혀 다를 수 있다.
+> - **기본적으로 모델 성능이 우선**이다. Tool Calling을 안정적으로 지원하는 모델(GPT-4o, Claude 등)에서는 Tool Calling 모드의 실패율이 크게 낮아질 수 있다.
+> - **서빙 엔진에 따라 동작이 달라진다.** vLLM의 xgrammar는 JSON Schema의 description을 무시하지만, OpenAI API나 다른 엔진에서는 다를 수 있다.
+> - 이 벤치마크는 프레임워크 간 **상대적 특성 차이**를 파악하기 위한 것이며, 절대적 성능 수치로 일반화해서는 안 된다.
+
 ### Result Matrix
 
 | Framework / Mode | A_desc | B_nodesc | C_rich | Overall |
 |-----------------|--------|----------|--------|---------|
-| [Instructor](https://python.useinstructor.com/) / tools | 94.6% | 94.9% | 95.5% | **95.0%** |
-| [Instructor](https://python.useinstructor.com/) / json_schema | 94.9% | 94.7% | 96.0% | **95.2%** |
-| [OpenAI Native](https://platform.openai.com/docs/guides/structured-outputs) / default | 82.5% | 85.2% | 96.0% | 87.9% |
-| [LangChain](https://python.langchain.com/docs/how_to/structured_output/) / json_schema | 84.0% (1F) | 81.1% | 96.0% | 87.1% |
-| [LangChain](https://python.langchain.com/docs/how_to/structured_output/) / function_calling | ALL FAIL | ALL FAIL | 96.0% | 96.0% |
-| [Marvin](https://askmarvin.ai/docs/text/extraction/) / default | 93.5% | 94.4% | 95.8% | **94.6%** |
-| [PydanticAI](https://ai.pydantic.dev/output/) / default | 38.7% | 40.5% (2F) | 96.0% | 59.7% |
-| [Mirascope](https://mirascope.com/docs/mirascope/guides/getting-started/structured-outputs/) / default | 35.0% (5F) | 34.2% (5F) | 96.0% | 65.3% |
-| [Guardrails](https://www.guardrailsai.com/docs/how_to_guides/generate_structured_data) / default | 7.8% (6F) | 6.0% (7F) | 96.0% | 59.4% |
-| **AVG** | 73.6% (22F) | 76.0% (24F) | 95.9% (0F) | — |
+| **instructor**/tools | 91.8% (86F) | 91.1% (87F) | 93.6% (17F) | 93.1% |
+| **instructor**/tools_strict | 90.8% (92F) | 86.7% (90F) | 94.3% (16F) | 93.2% |
+| **instructor**/json | 93.5% (2F) | 93.0% (3F) | 93.7% (3F) | **93.4%** |
+| **instructor**/json_schema | 80.6% (52F) | 75.4% (49F) | 93.5% (3F) | 85.6% |
+| **instructor**/md_json | 93.8% (3F) | 93.0% (4F) | 93.8% (3F) | **93.5%** |
+| **openai**/default | 89.1% | 86.9% | 93.5% | 89.8% |
+| **openai**/tool_calling | 91.6% (73F) | 95.5% (73F) | 93.4% (11F) | 93.5% |
+| **openai**/json_object | 94.0% (4F) | 93.3% (2F) | 93.8% (4F) | **93.7%** |
+| **langchain**/json_schema | 86.9% | 86.5% | 92.5% | 88.6% |
+| **langchain**/function_calling | 96.9% (92F) | 87.4% (85F) | 94.2% (12F) | 93.5% |
+| **langchain**/json_mode | 94.1% (2F) | 93.1% (3F) | 94.0% (3F) | **93.8%** |
+| **marvin**/cast | 93.6% (3F) | 93.1% (7F) | 93.9% (1F) | **93.5%** |
+| **marvin**/extract | 93.8% (2F) | 93.7% (2F) | 93.7% (2F) | **93.7%** |
+| **pydantic_ai**/tool | 57.1% (99F) | ALL FAIL | 94.0% (38F) | 93.4% |
+| **pydantic_ai**/json | 77.8% (48F) | 74.8% (49F) | 92.8% | 84.4% |
+| **pydantic_ai**/text | 94.5% (2F) | 93.0% (2F) | 93.9% (2F) | **93.8%** |
+| **mirascope**/tool | 93.0% (11F) | 93.3% (9F) | 93.0% (4F) | **93.1%** |
+| **mirascope**/json | 94.7% (9F) | 93.4% (7F) | 93.6% (14F) | **93.9%** |
+| **mirascope**/strict | 78.3% (45F) | 80.3% (46F) | 93.3% | 86.0% |
+| **guardrails**/default | 72.9% (6F) | 72.3% (7F) | 93.1% | 79.7% |
+| **llamaindex**/text | 94.3% (2F) | 93.4% (3F) | 94.0% (2F) | **93.9%** |
+| **llamaindex**/function_calling | ALL FAIL | ALL FAIL | 95.9% (55F) | 95.9% |
 
-> `(NF)` = 10건 중 N건 실패 (파싱 에러 또는 validation 실패). `ALL FAIL` = 10건 모두 실패.
+> `(NF)` = 100건 중 N건 실패 (파싱 에러, tool call 미생성 등). `ALL FAIL` = 100건 모두 실패. 성공한 샘플만으로 점수 계산.
 
 ### Scoring
 
-Ground Truth 기반 100점 만점 채점 방식을 사용하였다. 12개 카테고리로 나뉘며, 각 항목은 키워드 매칭, 개수 일치, 정확도 등을 종합적으로 평가한다.
+Ground Truth 기반 100점 만점 채점 방식을 사용하였다. 각 필드의 값을 Ground Truth와 비교하여 키워드 매칭, 개수 일치, 정확도 등을 종합적으로 평가한다.
 
 ---
 
 ## Analysis
 
-### 1. Rich Prompt → 모든 프레임워크가 ~96%로 수렴
+### 1. Rich Prompt → 모든 프레임워크가 ~93%로 수렴
 
-가장 두드러진 결과는, 프롬프트에 필드 설명을 상세히 넣은 조합 C에서 **모든 프레임워크가 95.5~96.0%로 수렴**했다는 점이다.
+프롬프트에 필드 설명을 상세히 넣은 조합 C에서 **대부분의 프레임워크가 92~95%로 수렴**하며, 실패율도 대폭 감소한다.
 
-- Guardrails: 6~8% -> **96%** (12배 이상 향상)
-- Mirascope: 34~35% -> **96%** (약 3배 향상)
-- PydanticAI: 38~40% -> **96%** (약 2.5배 향상)
-- LangChain function_calling: ALL FAIL -> **96%** (실패에서 성공으로)
+- guardrails: 72% → **93.1%** (실패 0건)
+- pydantic_ai/json: 74~78% → **92.8%** (실패 0건)
+- mirascope/strict: 78~80% → **93.3%** (실패 0건)
+- llamaindex/function_calling: ALL FAIL → **95.9%** (실패에서 성공으로)
 
-프롬프트에 필드 설명을 명시하면 프레임워크 간 성능 차이가 사실상 사라진다. 이는 LLM이 "무엇을 추출해야 하는가"에 대한 정보를 프롬프트에서 직접 얻을 수 있기 때문이다.
+프롬프트에 필드 설명을 명시하면 프레임워크 간 성능 차이가 사실상 사라진다.
 
-### 2. Tool Calling 방식만 A/B에서 고성능
+### 2. 안정적인 모드 vs 불안정한 모드
 
-프롬프트에 설명이 없는 조합 A/B에서도 높은 점수를 유지한 프레임워크들이 있다:
+**안정적 (실패율 < 5%)**: 프롬프트에 스키마를 직접 포함하거나 JSON 기반으로 동작하는 모드
+- instructor/json, md_json, langchain/json_mode, openai/json_object, pydantic_ai/text, llamaindex/text, marvin/*, mirascope/tool
 
-- **Instructor** (94.6~95.5%): `from_provider`가 tool definition에 description을 포함하여 전달
-- **Marvin** (93.5~94.4%): pydantic_ai 기반 Tool Calling으로 description 전달
+**불안정 (실패율 > 30%)**: Tool Calling 방식으로 LLM이 tool call 자체를 생성하지 못하는 경우
+- instructor/tools, tools_strict, openai/tool_calling, langchain/function_calling, pydantic_ai/tool, llamaindex/function_calling
 
-공통점은 **Tool Calling 방식으로 description을 LLM에 직접 전달**한다는 것이다.
+vLLM 환경에서 Tool Calling은 `tool_choice`로 강제해도 모델이 content로 JSON을 반환하거나 multiple tool calls를 생성하는 등 불안정한 동작을 보인다.
 
-### 3. JSON Schema (xgrammar) → A/B에서 중간 성능
+### 3. JSON Schema (xgrammar) 모드의 한계
 
-- **OpenAI Native**: 82.5~85.2%
-- **LangChain json_schema**: 81.1~84.0%
+- **openai/default**: 86.9~89.1% (실패 0건, 안정적이지만 점수 하락)
+- **langchain/json_schema**: 86.5~86.9% (실패 0건, 동일)
+- **instructor/json_schema**: 75.4~80.6% (높은 실패율)
+- **pydantic_ai/json**: 74.8~77.8% (높은 실패율)
 
-`response_format`으로 JSON Schema를 전달하지만, vLLM의 xgrammar가 description을 무시하기 때문에 구조만 강제되고 의미 정보가 부족하다.
+`response_format`으로 JSON Schema를 전달하면 xgrammar가 **구조만 강제**하고 description을 무시한다. openai/default와 langchain/json_schema는 실패 없이 안정적이지만 점수가 낮고, instructor/json_schema와 pydantic_ai/json은 높은 실패율을 동반한다.
 
-### 4. A/B에서 저성능 프레임워크
+### 4. Schema Description 효과 (A vs B) → 미미
 
-- **PydanticAI** (38~40%): Tool Calling 방식이지만, NoDesc 스키마에서 description이 없으면 tool definition에도 설명이 포함되지 않아 낮은 성능
-- **Mirascope** (34~35%): Literal 타입 validation 실패가 빈번하게 발생 (10건 중 5건 실패)
-- **Guardrails** (6~8%): litellm을 경유하면서 description 전달이 불안정하고, 10건 중 6~7건이 실패
+A(desc)와 B(nodesc)의 점수 차이는 대부분 1~3%p로 미미하다. JSON Schema 방식에서는 xgrammar가 description을 무시하고, Tool Calling 방식에서도 필드명만으로 어느 정도 추론이 가능하기 때문이다.
 
-### 5. Schema Description 효과 (A vs B) → 미미
+### 5. Tool Calling 실패 원인 분석
 
-| 조합 | 전체 평균 | 실패 수 |
-|------|----------|---------|
-| A (desc + minimal) | 73.6% | 22건 실패 |
-| B (no desc + minimal) | 76.0% | 24건 실패 |
+vLLM에서 Tool Calling 실패는 크게 두 가지 원인으로 나뉜다:
 
-A와 B의 차이는 2.4%p로 거의 없다. JSON Schema 방식에서는 xgrammar가 무시하고, Tool Calling 방식에서는 필드명만으로도 어느 정도 추론이 가능하기 때문이다.
+1. **tool call 미생성**: `tool_choice`로 함수를 강제 지정해도 모델이 tool call 대신 content에 JSON을 반환 (instructor/tools_strict, pydantic_ai/tool에서 빈번)
+2. **multiple tool calls**: 단일 스키마 추출인데 모델이 여러 개의 tool call을 생성하여 프레임워크가 거부 (instructor에서 발견)
 
-### 6. Literal Type Issue
-
-스키마에 포함된 `Literal` 타입 제약이 실패의 주요 원인이었다. LLM이 정확한 Literal 값 대신 유사한 값을 생성하는 경우가 빈번하였으며, 이로 인해 Pydantic validation error가 발생한다. `langchain/function_calling`이 조합 A/B에서 전부 실패한 주요 원인이기도 하다.
+이는 프레임워크 코드 문제가 아닌 **모델의 tool calling 능력 한계**이다.
 
 ---
 
@@ -339,16 +359,18 @@ A와 B의 차이는 2.4%p로 거의 없다. JSON Schema 방식에서는 xgrammar
 ```
 Key Findings:
   1. 프롬프트 엔지니어링 >> 프레임워크 선택
-  2. Rich Prompt 사용 시 모든 프레임워크가 ~96%로 동일한 성능
-  3. 스키마 description에만 의존하면 Tool Calling 계열에서만 효과 있음
+  2. Rich Prompt 사용 시 대부분의 프레임워크가 ~93%로 수렴
+  3. JSON 기반 모드(json, md_json, json_mode, json_object, text)가 Tool Calling보다 안정적
   4. vLLM의 xgrammar는 JSON Schema의 description을 완전히 무시
+  5. Tool Calling은 vLLM 환경에서 높은 실패율을 보임 (tool call 미생성, multiple tool calls)
 ```
 
-**vLLM 환경에서 Structured Output 품질을 높이려면 프롬프트에 필드 설명을 명시하는 것이 가장 확실하고 효과적인 방법이다.** 이 경우 어떤 프레임워크를 사용하든 결과는 동일하다 (~96%).
+**vLLM 환경에서 Structured Output 품질을 높이려면:**
+1. **프롬프트에 필드 설명을 명시** — 어떤 프레임워크를 사용하든 결과가 ~93%로 수렴
+2. **JSON 기반 모드를 우선 사용** — Tool Calling 대비 실패율이 현저히 낮음
+3. **Tool Calling은 주의** — 모델이 tool call을 안정적으로 생성하지 못하는 경우가 많음
 
-스키마의 `Field(description=...)` 에만 의존하는 전략은, Tool Calling 방식으로 description을 LLM에 직접 전달하는 프레임워크(Instructor, Marvin)에서만 유효하다. JSON Schema 방식(OpenAI native, LangChain json_schema)에서는 xgrammar가 description을 무시하므로 효과가 없다.
-
-결론적으로, **프레임워크의 선택보다 프롬프트 엔지니어링이 성능에 훨씬 더 큰 영향을 미친다.**
+결론적으로, **프레임워크의 선택보다 프롬프트 엔지니어링이 성능에 훨씬 더 큰 영향을 미치며**, vLLM 환경에서는 JSON 기반 모드가 Tool Calling보다 안정적이다.
 
 ---
 
@@ -369,8 +391,17 @@ uv sync
 ### Run Benchmark
 
 ```bash
-cd tests
-uv run run_multi_resume_benchmark.py
+# 전체 벤치마크
+uv run python run_benchmark.py --dataset deepjsoneval
+
+# 특정 프레임워크만
+uv run python run_benchmark.py --dataset deepjsoneval --frameworks instructor/tools openai/default
+
+# 샘플 수 제한
+uv run python run_benchmark.py --dataset deepjsoneval --max-samples 10
+
+# 서버 설정
+uv run python run_benchmark.py --dataset deepjsoneval --base-url http://localhost:8001/v1 --model my-model
 ```
 
 ### Run API Server
