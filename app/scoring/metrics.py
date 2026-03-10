@@ -46,7 +46,8 @@ def compare_number(actual: Any, predicted: Any, tolerance: float = 0.05) -> floa
     if a == p:
         return 1.0
     if a == 0:
-        return 0.0
+        # GT가 0이면 절대 오차 기반 비교 (pred도 0에 가까워야 함)
+        return 1.0 if abs(p) <= tolerance else 0.0
     rel_error = abs(a - p) / abs(a)
     return 1.0 if rel_error <= tolerance else 0.0
 
